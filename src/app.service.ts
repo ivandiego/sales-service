@@ -1,10 +1,12 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { Event } from './entities/event.entity';
 import { Ticket } from './entities/ticket.entity';
+import { TicketOrder } from './entities/ticket-order.entity';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { CreateEventDto } from './dto/create-event.dto';
+import { ClientKafka } from '@nestjs/microservices';
 
 @Injectable()
 export class AppService {
@@ -14,6 +16,12 @@ export class AppService {
     
     @InjectRepository(Ticket)
     private ticketRepository: Repository<Ticket>,
+
+    @InjectRepository(TicketOrder)
+    private orderRepository: Repository<TicketOrder>,
+
+    @Inject('SALES_SERVICE') private readonly salesServiceClient: ClientKafka,
+
   ) {}
 
   // ✅ Buscar eventos disponíveis
@@ -21,41 +29,28 @@ export class AppService {
     return this.eventRepository.find({ where: { availableTickets: MoreThan(0) } });
   }
 
-  // ✅ Criar um novo evento
-  async createEvent(dto: CreateEventDto): Promise<Event> {
-    const event = this.eventRepository.create(dto);
-    return this.eventRepository.save(event);
-  }
+  // // ✅ Processar compra e enviar para Kafka
+  // async buyTicket(userId: string, eventId: string, quantity: number) {
+  //   const event = await this.eventRepository.findOne({ where: { id: eventId } });
 
-  // ✅ Criar um novo ticket (compra de bilhete)
-  async createTicket(dto: CreateTicketDto): Promise<Ticket> {
-    return this.buyTicket(dto);
-  }
+  //   if (!event || event.soldTickets + quantity > event.totalTickets) {
+  //     throw new BadRequestException('Ingressos esgotados!');
+  //   }
 
-  // ✅ Comprar bilhete com regras de validação
-  async buyTicket(dto: CreateTicketDto): Promise<Ticket> {
-    const event = await this.eventRepository.findOne({ where: { id: dto.eventId } });
+  //   // Atualiza temporariamente os ingressos vendidos
+  //   event.soldTickets += quantity;
+  //   await this.eventRepository.save(event);
 
-    if (!event) {
-      throw new BadRequestException('Event not found');
-    }
+  //   // Envia o pedido para a fila Kafka
+  //   this.salesServiceClient.emit('ticket_purchase', { userId, eventId, quantity });
 
-    if (event.availableTickets < dto.quantity) {
-      throw new BadRequestException('Not enough tickets available');
-    }
+  //   return event;
+  // }
 
-    const userTickets = await this.ticketRepository.count({
-      where: { userId: dto.userId, event: { id: event.id } },
-    });
+  // // ✅ Atualiza venda após pagamento confirmado pelo Payment Service
+  // async confirmTicketPurchase(userId: string, eventId: string, quantity: number) {
+  //   await this.orderRepository.save({ userId, eventId, quantity });
 
-    if (userTickets + dto.quantity > 5) {
-      throw new BadRequestException('Maximum 5 tickets per user per event');
-    }
-
-    event.availableTickets -= dto.quantity;
-    await this.eventRepository.save(event);
-
-    const ticket = this.ticketRepository.create({ ...dto, event });
-    return this.ticketRepository.save(ticket);
-  }
+  //   return { message: 'Venda registrada com sucesso!' };
+  // }
 }

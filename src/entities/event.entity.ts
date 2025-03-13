@@ -14,4 +14,10 @@ export class Event {
 
   @OneToMany(() => Ticket, (ticket) => ticket.event) // 🔥 Relacionamento reverso com Ticket
   tickets: Ticket[];
+
+  @Column({ default: 0, nullable: false }) // 🔥 Corrigido: não pode ser NULL
+  soldTickets: number;
+
+  @Column({ default: 0, nullable: false }) // 🔥 Corrigido: não pode ser NULL
+  totalTickets: number;
 }
